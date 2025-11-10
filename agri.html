@@ -1,0 +1,832 @@
+<?php
+// PHP wrapper for a client-side application.
+// This structure is maintained from the original file.
+?>
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payroll Time Log Generator (Enhanced)</title>
+    <!-- Use Inter font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            /* slate-900 */
+            --bg-card: #1e293b;
+            /* slate-800 */
+            --text-light: #f1f5f9;
+            /* slate-100 */
+            --accent: #22c55e;
+            /* emerald-500 */
+            --accent-hover: #10b981;
+            /* emerald-600 */
+            --error-bg: #ef4444;
+            /* red-500 */
+            --error-border: #dc2626;
+            /* red-600 */
+            --error-text: #fee2e2;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-light);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 1rem;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 3xl;
+        }
+
+        .card {
+            background-color: var(--bg-card);
+            border-radius: 0.75rem;
+            padding: 2rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        .file-input-container {
+            border: 2px dashed #475569;
+            /* slate-600 */
+            border-radius: 0.5rem;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+
+        .file-input-container:hover {
+            border-color: var(--accent);
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        button {
+            background-color: var(--accent);
+            color: var(--bg-dark);
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            transition: background-color 0.2s;
+        }
+
+        button:hover:not(:disabled) {
+            background-color: var(--accent-hover);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .error-display {
+            background-color: var(--error-bg);
+            border: 1px solid var(--error-border);
+            color: var(--error-text);
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .loading-indicator {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid var(--text-light);
+            border-radius: 50%;
+            width: 1.5rem;
+            height: 1.5rem;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1 class="text-3xl font-bold text-center mb-6">Payroll Time Log Generator</h1>
+        <div class="card space-y-6">
+
+            <!-- File Upload Area -->
+            <div id="fileInputContainer" class="file-input-container">
+                <input type="file" id="fileInput" accept=".csv, .xlsx">
+                <p class="text-lg">Drag & drop your **BILLING** CSV/Excel file here, or click to select.</p>
+                <p class="text-sm text-slate-400 mt-1">Accepts CSV or XLSX (using the first sheet).</p>
+            </div>
+
+            <div id="fileNameDisplay" class="text-center text-sm text-slate-400 hidden"></div>
+
+            <!-- Metadata Display -->
+            <div id="metadataDisplay" class="bg-slate-700 p-4 rounded-lg hidden">
+                <h3 class="font-semibold mb-2">Extracted Details:</h3>
+                <p id="metaPeriod" class="text-sm">Period Covered: <span class="font-bold text-yellow-300">N/A</span>
+                </p>
+                <p id="metaClient" class="text-sm">Client: <span class="font-bold text-yellow-300">AGRI-EXIM GLOBAL
+                        INC.</span></p>
+                <p id="metaDepartment" class="text-sm">Department: <span class="font-bold text-yellow-300">N/A</span></p>
+            </div>
+
+            <!-- Status and Error Messages -->
+            <div id="statusMessage" class="bg-emerald-700 text-white p-3 rounded-lg hidden" role="status"></div>
+            <div id="errorDisplay" class="error-display hidden" role="alert">
+                <p id="errorMessage"></p>
+            </div>
+
+            <!-- Data Preview Table -->
+            <div id="dataPreview" class="hidden space-y-2">
+                <h3 class="font-semibold">Data Preview:</h3>
+                <div class="overflow-auto max-h-60 border border-slate-600 rounded-lg">
+                    <table id="previewTable" class="min-w-full divide-y divide-slate-700">
+                        <thead class="bg-slate-700 sticky top-0">
+                            <tr>
+                                <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider">Employee Name</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider">Date</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider">Check In</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider">Check Out</th>
+                            </tr>
+                        </thead>
+                        <tbody id="previewTableBody" class="bg-slate-800 divide-y divide-slate-700">
+                            <!-- Data rows will be inserted here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Export Buttons -->
+            <div class="flex space-x-4">
+                <button id="exportBtn" class="w-full flex items-center justify-center space-x-2" disabled>
+                    <span id="exportText">Export Time Log Data (CSV)</span>
+                    <div id="loadingIndicator" class="loading-indicator hidden"></div>
+                </button>
+                <button id="generateNextFileBtn" class="w-full flex items-center justify-center space-x-2">
+                    <span>Upload Another File</span>
+                </button>
+                <a href="https://gofile.me/7timK/udHIOxlZY" target="_blank" class="w-full flex items-center justify-center space-x-2 bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded">
+                    <span>Download Template</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- External Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.4/xlsx.full.min.js"></script>
+
+    <script>
+        // Global state
+        let jsonData = [];
+        let metadata = {};
+
+        // DOM elements
+        const fileInput = document.getElementById('fileInput');
+        const fileInputContainer = document.getElementById('fileInputContainer');
+        const fileNameDisplay = document.getElementById('fileNameDisplay');
+        const exportBtn = document.getElementById('exportBtn');
+        const exportText = document.getElementById('exportText');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const statusMessage = document.getElementById('statusMessage');
+        const errorDisplay = document.getElementById('errorDisplay');
+        const errorMessage = document.getElementById('errorMessage');
+        const metadataDisplay = document.getElementById('metadataDisplay');
+        const metaPeriod = document.getElementById('metaPeriod').querySelector('span');
+        const metaClient = document.getElementById('metaClient').querySelector('span');
+        const metaDepartment = document.getElementById('metaDepartment').querySelector('span');
+        const generateNextFileBtn = document.getElementById('generateNextFileBtn');
+
+        // CSV Byte Order Mark (BOM) for Excel compatibility (UTF-8 encoding)
+        const CSV_BOM = "\uFEFF";
+
+        // --- Helper Functions ---
+
+        /**
+         * Clears all state and UI messages.
+         */
+        function resetState() {
+            jsonData = [];
+            metadata = {};
+            exportBtn.disabled = true;
+            statusMessage.classList.add('hidden');
+            errorDisplay.classList.add('hidden');
+            metadataDisplay.classList.add('hidden');
+            fileNameDisplay.classList.add('hidden');
+            fileNameDisplay.textContent = '';
+            metaPeriod.textContent = 'N/A';
+            metaDepartment.textContent = 'N/A';
+            document.getElementById('dataPreview').classList.add('hidden');
+            fileInput.value = ''; // Clear the file input
+        }
+
+        /**
+         * Converts CSV text (multi-line) into a 2D array of strings.
+         * @param {string} csvText - The raw CSV content.
+         * @returns {string[][]} A 2D array representing the CSV data.
+         */
+        function csvToArray(csvText) {
+            const rows = csvText.split(/\r?\n/).filter(line => line.trim() !== '');
+            return rows.map(row => {
+                // A basic, but usually sufficient, split for CSV comma separation
+                // Note: This does not handle quoted strings with embedded commas robustly.
+                return row.split(',').map(cell => cell.trim().replace(/^"|"$/g, '').trim());
+            });
+        }
+
+        /**
+         * Reads the content of an uploaded file (CSV or XLSX) into a raw 2D array of strings.
+         * @param {File} file - The uploaded file object.
+         * @returns {Promise<string[][]>} A promise that resolves with the 2D array of file content.
+         */
+        function readFileContent(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+
+                reader.onload = (e) => {
+                    const data = e.target.result;
+                    let csvDataArray;
+
+                    if (file.name.endsWith('.xlsx')) {
+                        try {
+                            const workbook = XLSX.read(data, { type: 'binary' });
+                            const sheetName = workbook.SheetNames[0];
+                            const worksheet = workbook.Sheets[sheetName];
+                            csvDataArray = XLSX.utils.sheet_to_csv(worksheet, { FS: ',', RS: '\n' });
+                            resolve(csvToArray(csvDataArray));
+                        } catch (error) {
+                            reject(new Error("Failed to parse XLSX file. " + error.message));
+                        }
+                    } else if (file.name.endsWith('.csv')) {
+                        resolve(csvToArray(data));
+                    }
+                };
+
+                reader.onerror = () => reject(new Error("Error reading file."));
+
+                // Read as binary string for XLSX, or text for CSV
+                if (file.name.endsWith('.xlsx')) {
+                    reader.readAsBinaryString(file);
+                } else {
+                    reader.readAsText(file);
+                }
+            });
+        }
+
+
+        /**
+         * Extracts metadata (like period covered) from the billing data.
+         * @param {string[][]} data - The 2D array of CSV/Excel content.
+         * @param {string} fileName - The name of the uploaded file.
+         * @returns {{ periodCovered: string, client: string, department: string }} The extracted metadata.
+         */
+        function extractMetadata(data, fileName) {
+            let department = "N/A";
+            if (fileName) {
+                // Extract department from filename like "AGRI-VCO CREW- 0801-0815, 2025"
+                const parts = fileName.split('-');
+                if (parts.length > 1) {
+                    department = parts[1].trim();
+                }
+            }
+
+            if (data.length === 0) return { periodCovered: "N/A", client: "AGRI-EXIM GLOBAL INC.", department: department };
+
+            const dateRow = data[0]; // Assuming the first row contains the dates
+
+            let dates = [];
+
+            // Iterate over all cells in the first row after the first two columns (No/MembersName)
+            for (let i = 2; i < dateRow.length; i++) {
+                // The expected date format is YYYY-MM-DD
+                const cellValue = dateRow[i].trim();
+                const dateMatch = cellValue.match(/^(\d{4})-(\d{2})-(\d{2})$/); // Strict match start/end of string
+
+                if (dateMatch) {
+                    // dateMatch[0] is the full YYYY-MM-DD string
+                    dates.push(dateMatch[0]);
+                }
+            }
+
+            let periodCovered = "N/A";
+            if (dates.length > 0) {
+                // 1. Remove duplicates and sort (sorting YYYY-MM-DD naturally sorts by date)
+                const uniqueDates = [...new Set(dates)].sort();
+                const startDateStr = uniqueDates[0];
+                const endDateStr = uniqueDates[uniqueDates.length - 1];
+
+                // 2. Helper to convert YYYY-MM-DD to MM/DD/YYYY reliably via string parts
+                const formatDate = (dateStr) => {
+                    // dateStr is expected to be YYYY-MM-DD
+                    return dateStr;
+                };
+
+                // Format the output as MM/DD/YYYY - MM/DD/YYYY
+                periodCovered = `${formatDate(startDateStr)} - ${formatDate(endDateStr)}`;
+            }
+
+            return {
+                periodCovered: periodCovered,
+                client: "AGRI-EXIM GLOBAL INC.", // Placeholder based on file data
+                department: department
+            };
+        }
+
+        /**
+         * Processes the 2D array data from the BILLING sheet into standardized
+         * time log entries with calculated IN/OUT times.
+         * @param {string[][]} data - The 2D array of CSV/Excel content.
+         * @returns {Array<object>} An array of standardized time log entries with IN/OUT.
+         */
+        function processTimeData(data) {
+            if (data.length < 3) {
+                throw new Error("File content is too short. Expected at least 3 header rows.");
+            }
+
+            const DateHeaderRow = data[0].map(c => c.trim());
+            const TypeHeaderRow = data[1].map(c => c.trim());
+            const dataStartRow = 3; // Data starts at index 3 (Row 4 in Excel)
+
+            // 1. Build a combined column map
+            const columnMap = [];
+            let currentDate = null;
+
+            for (let i = 2; i < DateHeaderRow.length; i++) {
+                // If a date is present in the DateHeaderRow, update the current date
+                if (DateHeaderRow[i]) {
+                    currentDate = DateHeaderRow[i];
+                }
+
+                const hourType = TypeHeaderRow[i];
+
+                if (currentDate && hourType) {
+                    columnMap.push({
+                        date: currentDate, // This is YYYY-MM-DD from the file
+                        type: hourType,
+                        index: i
+                    });
+                }
+            }
+
+            if (columnMap.length === 0) {
+                throw new Error("Could not identify valid date/hour type columns for processing. Check your header structure.");
+            }
+
+            // 2. Group raw hours by Employee and Date
+            const employeeDailyHours = {};
+
+            for (let r = dataStartRow; r < data.length; r++) {
+                const row = data[r];
+                const employeeNo = row[0];
+                const employeeName = row[1];
+
+                if (!employeeName) continue;
+
+                for (const col of columnMap) {
+                    const hours = parseFloat(row[col.index]) || 0;
+
+                    if (hours > 0) {
+                        const key = `${employeeName}|${col.date}`;
+                        if (!employeeDailyHours[key]) {
+                            employeeDailyHours[key] = {
+                                employeeNo: employeeNo || null,
+                                employeeName: employeeName,
+                                date: col.date,
+                                'REG HRS': 0,
+                                'REG OT HRS': 0,
+                                'REG ND HRS': 0,
+                            };
+                        }
+                        if (employeeDailyHours[key].hasOwnProperty(col.type)) {
+                            employeeDailyHours[key][col.type] += hours;
+                        }
+                    }
+                }
+            }
+
+            // 3. Generate individual raw time logs (REG/OT and ND) with Date objects for accurate time comparison
+            const rawTimeLogs = [];
+
+            // Shift Configuration Constants
+            const REG_START_HOUR = 8; // 8:00 AM
+            const ND_START_HOUR = 22; // 10:00 PM
+            const BREAK_DURATION = 1;  // 1 hour unpaid break
+            const GRACE_PERIOD_MINUTES = 15; // 15 minutes grace period for 8-hour shift
+
+            // Helper to format time as HH:MM
+            const formatTime = (date) => {
+                const hours = date.getHours().toString().padStart(2, '0');
+                const minutes = date.getMinutes().toString().padStart(2, '0');
+                return `${hours}:${minutes}`;
+            };
+
+            // Iterate over each employee's daily aggregated hours
+            for (const key in employeeDailyHours) {
+                const dayEntry = employeeDailyHours[key];
+                const { employeeName, date } = dayEntry;
+
+                const regHours = dayEntry['REG HRS'] || 0;
+                const otHours = dayEntry['REG OT HRS'] || 0;
+                const ndHours = dayEntry['REG ND HRS'] || 0;
+
+                // --- 1. Process REG HRS and REG OT HRS (Combined Log) ---
+                if (regHours > 0 || otHours > 0) {
+                    const totalPaidHours = regHours + otHours;
+                    let breakDurationHours = 0;
+                    let status = 'On Time'; // Default status
+
+                    // Start the calculation at 8:00 AM on the shift date (YYYY-MM-DD format)
+                    let currentTimestamp = new Date(`${date} ${REG_START_HOUR}:00:00`);
+
+                    // --- Time In Adjustment Logic ---
+                    if (regHours === 8) {
+                        // Full Attendance (8 HRS) -> Apply random minute grace period (0-15 mins)
+                        const randomGraceMinutes = Math.floor(Math.random() * (GRACE_PERIOD_MINUTES + 1));
+                        currentTimestamp.setMinutes(currentTimestamp.getMinutes() + randomGraceMinutes);
+
+                        // Break applies only to 8-hour shifts
+                        breakDurationHours = BREAK_DURATION;
+
+                    } else if (regHours > 0 && regHours < 8) {
+                        // Undertime -> Check-in is at regular time, but checkout is earlier.
+                        // No change to currentTimestamp for check-in (it's 8:00 AM)
+                        
+                        // No break for partial shifts
+                        breakDurationHours = 0;
+                        status = 'Undertime';
+                    }
+
+                    const timeInREG = new Date(currentTimestamp);
+
+                    // Total duration worker must clock in for (Paid Work + Break)
+                    const totalClockHours = totalPaidHours + breakDurationHours;
+                    const totalMinutes = totalClockHours * 60;
+
+                    // Advance timestamp by total clock duration
+                    currentTimestamp.setTime(currentTimestamp.getTime() + totalMinutes * 60 * 1000);
+
+                    // --- 2. Apply Random Minutes (0-59) to the final clock-out time ---
+                    const randomMinutes = Math.floor(Math.random() * 60); // 0 to 59 minutes
+                    currentTimestamp.setMinutes(currentTimestamp.getMinutes() + randomMinutes);
+                    const timeOutREGOT = new Date(currentTimestamp);
+
+                    // Store as a raw log
+                    rawTimeLogs.push({
+                        employeeName,
+                        date,
+                        timeIn: timeInREG,
+                        timeOut: timeOutREGOT,
+                        status: status,
+                    });
+                }
+
+                // --- 3. Process REG ND HRS (Fixed 10:00 PM Shift) ---
+                if (ndHours > 0) {
+
+                    // ND shift timeIn is fixed at 10:00 PM (22:00) 
+                    let currentTimestampND = new Date(`${date} ${ND_START_HOUR}:00:00`);
+
+                    // NEW: Add random minutes (0-59) to the night shift time in
+                    const randomMinutesInND = Math.floor(Math.random() * 60);
+                    currentTimestampND.setMinutes(currentTimestampND.getMinutes() + randomMinutesInND);
+
+                    const ndMinutes = ndHours * 60;
+                    const timeInND = new Date(currentTimestampND);
+
+                    // Advance timestamp for ND duration (correctly handles date rollover)
+                    currentTimestampND.setTime(currentTimestampND.getTime() + ndMinutes * 60 * 1000);
+
+                    // NEW: Add random minutes (0-59) to the night shift time out
+                    const randomMinutesOutND = Math.floor(Math.random() * 60);
+                    currentTimestampND.setMinutes(currentTimestampND.getMinutes() + randomMinutesOutND);
+
+                    const timeOutND = new Date(currentTimestampND);
+
+                    // Store as a raw log
+                    rawTimeLogs.push({
+                        employeeName,
+                        date,
+                        timeIn: timeInND,
+                        timeOut: timeOutND,
+                        status: 'On Time', // ND is always on time for this logic
+                    });
+                }
+            } // End of employeeDailyHours loop
+
+
+            if (rawTimeLogs.length === 0) {
+                throw new Error("Successfully parsed the file, but found no time entries (Hours > 0).");
+            }
+
+            // 4. Group and Merge Shifts (Combines multiple shifts for the same day into one entry)
+            const mergedDailyLogs = {}; // Key: "EmployeeName|Date"
+
+            rawTimeLogs.forEach(log => {
+                const key = `${log.employeeName}|${log.date}`;
+
+                // Use Date object timestamps for accurate comparison across midnight
+                const logTimeInMS = log.timeIn.getTime();
+                const logTimeOutMS = log.timeOut.getTime();
+
+                if (!mergedDailyLogs[key]) {
+                    // First log for the day
+                    mergedDailyLogs[key] = {
+                        employeeName: log.employeeName,
+                        date: log.date,
+                        timeIn: log.timeIn,
+                        timeOut: log.timeOut,
+                        hasND: false, // Flag to check if ND was part of the merged log
+                        status: log.status,
+                    };
+                }
+
+                if (log.status === 'Undertime') {
+                    mergedDailyLogs[key].status = 'Undertime';
+                }
+
+                // Check if ND was present for the day
+                if (log.timeIn.getHours() >= ND_START_HOUR || log.timeOut.getHours() < REG_START_HOUR) {
+                    mergedDailyLogs[key].hasND = true;
+                }
+
+                // Find Earliest Time In
+                if (logTimeInMS < mergedDailyLogs[key].timeIn.getTime()) {
+                    mergedDailyLogs[key].timeIn = log.timeIn;
+                }
+
+                // Find Latest Time Out
+                if (logTimeOutMS > mergedDailyLogs[key].timeOut.getTime()) {
+                    mergedDailyLogs[key].timeOut = log.timeOut;
+                }
+            });
+
+            // Helper to convert Date string (YYYY-MM-DD) to MM/DD/YYYY format for CSV output
+            const formatDateForCsv = (dateStr) => {
+                const parts = dateStr.match(/(\d{4})-(\d{2})-(\d{2})/);
+                if (parts) {
+                    return `${parts[2]}/${parts[3]}/${parts[1]}`; // MM/DD/YYYY
+                }
+                return dateStr;
+            };
+
+
+            // 5. Convert merged Date objects back to HH:MM strings for final output, applying ND time-in override
+            const finalLogs = Object.values(mergedDailyLogs).map(mergedLog => {
+                let finalTimeIn = mergedLog.timeIn; // Default is the calculated earliest time in
+
+                // --- Override Time In if ND hours exist (as flagged during merge) ---
+                if (mergedLog.hasND) {
+                    // Recalculate the 10:00 PM Time In with a NEW random offset (0-59 mins)
+                    let ndTimeInOverride = new Date(`${mergedLog.date} ${ND_START_HOUR}:00:00`);
+                    const randomMinutesInOverride = Math.floor(Math.random() * 60);
+                    ndTimeInOverride.setMinutes(ndTimeInOverride.getMinutes() + randomMinutesInOverride);
+
+                    finalTimeIn = ndTimeInOverride;
+                }
+
+                return {
+                    employeeName: mergedLog.employeeName,
+                    // Use the date from the log, but format it as MM/DD/YYYY
+                    date: formatDateForCsv(mergedLog.date),
+                    // UPDATED: Rename keys to checkIn and checkOut
+                    checkIn: formatTime(finalTimeIn),
+                    checkOut: formatTime(mergedLog.timeOut)
+                };
+            });
+
+            return finalLogs;
+        }
+
+        /**
+         * Converts the JSON data rows into a CSV string (excluding headers).
+         * @param {Array<object>} arr - Array of time log objects.
+         * @returns {string} The CSV formatted string of data rows.
+         */
+        function dataRowsToCsv(arr) {
+            if (arr.length === 0) return '';
+
+            // UPDATED: Manually define the header order to include the requested fields
+            const headers = ['employeeName', 'date', 'checkIn', 'checkOut'];
+            const headerRow = headers.join(',');
+
+            const rows = arr.map(obj => headers.map(key => {
+                const val = obj[key] || ''; // Use empty string for missing values
+                // Ensure values that contain commas or newlines are quoted
+                const str = String(val).replace(/"/g, '""');
+                return (str.includes(',') || str.includes('\n') || str.includes('"')) ? `"${str}"` : str;
+            }).join(','));
+
+            return [headerRow, ...rows].join('\n');
+        }
+
+        /**
+         * Generates the complete CSV content, including the new custom header.
+         * @param {Array<object>} dataArr - The processed time log data.
+         * @param {object} metadata - The extracted period and other details.
+         * @returns {string} The complete CSV string.
+         */
+        function generateFullCsvContent(dataArr, metadata) {
+            // 1. Prepare Header Components
+            const operatorNames = ["Ace", "Dexter", "Elena"];
+            const randomOperator = operatorNames[Math.floor(Math.random() * operatorNames.length)];
+
+            const now = new Date();
+            // Format for export time: MM/DD/YYYY HH:MM:SS AM/PM
+            const exportTime = now.toLocaleString('en-US', {
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                hour12: true
+            }).replace(',', '');
+
+            // 2. Construct Custom Header Lines (Single cell per header item)
+
+            const headerLines = [
+                "KFL MANPOWER AGENCY SERVER 3", // Main title in A1
+
+                // Each line below combines the Label and Value into Column A, followed by a comma to end the cell.
+                `Export Time: ${exportTime},`,
+                `Operator: ${randomOperator},`,
+                // This line uses the dynamically extracted date range from the file:
+                `Time Period: ${metadata.periodCovered},`,
+                `Department: ${metadata.department},`
+            ];
+
+            // Add an empty line for separation
+            headerLines.push('');
+
+            // 3. Get Data Rows
+            const dataCsv = dataRowsToCsv(dataArr);
+
+            // 4. Combine Header and Data
+            // Prepend BOM to ensure Excel opens the file with correct encoding and formatting.
+            return CSV_BOM + [...headerLines, dataCsv].join('\n');
+        }
+
+
+        /**
+         * Renders the processed data into a preview table.
+         * @param {Array<object>} data - The array of time log objects.
+         */
+        function renderPreviewTable(data) {
+            const tableBody = document.getElementById('previewTableBody');
+            const dataPreview = document.getElementById('dataPreview');
+
+            // Clear previous data
+            tableBody.innerHTML = '';
+
+            if (data.length === 0) {
+                dataPreview.classList.add('hidden');
+                return;
+            }
+
+            data.forEach(log => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="px-4 py-2 whitespace-nowrap">${log.employeeName}</td>
+                    <td class="px-4 py-2 whitespace-nowrap">${log.date}</td>
+                    <td class="px-4 py-2 whitespace-nowrap">${log.checkIn}</td>
+                    <td class="px-4 py-2 whitespace-nowrap">${log.checkOut}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+
+            dataPreview.classList.remove('hidden');
+        }
+
+
+        // --- Event Listeners and Main Logic ---
+
+        fileInputContainer.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                processFile(e.target.files[0]);
+            }
+        });
+
+        // Handle drag and drop events
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            fileInputContainer.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            }, false);
+        });
+
+        fileInputContainer.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const file = dt.files[0];
+            if (file) {
+                processFile(file);
+            }
+        });
+
+        /**
+         * Main function to handle file processing
+         * @param {File} file - The file object to process
+         */
+        async function processFile(file) {
+            resetState();
+
+            fileNameDisplay.textContent = `File Selected: ${file.name}`;
+            fileNameDisplay.classList.remove('hidden');
+
+            exportText.textContent = "Processing...";
+            loadingIndicator.classList.remove('hidden');
+
+            try {
+                // Read and parse the file (supports CSV or XLSX)
+                const csvData = await readFileContent(file);
+
+                // 1. Extract Metadata (Period Covered, SOA, Payroll Date, Client)
+                metadata = extractMetadata(csvData, file.name); // Pass filename
+                metaPeriod.textContent = metadata.periodCovered;
+                metaClient.textContent = metadata.client;
+                metaDepartment.textContent = metadata.department;
+                metadataDisplay.classList.remove('hidden');
+
+                // 2. Process the data
+                jsonData = processTimeData(csvData);
+
+                // 3. Render data for preview
+                renderPreviewTable(jsonData);
+
+                if (jsonData.length > 0) {
+                    exportBtn.disabled = false;
+                    statusMessage.textContent = `Successfully processed ${jsonData.length} time log entries for period: ${metadata.periodCovered}. Ready to export.`;
+                    statusMessage.classList.remove('hidden');
+                } else {
+                    throw new Error("No employee data was found after processing. Check the file content and structure (e.g., ensure it's the 'BILLING' tab).");
+                }
+
+            } catch (error) {
+                errorMessage.textContent = error.message;
+                errorDisplay.classList.remove('hidden');
+                exportBtn.disabled = true;
+                jsonData = [];
+                statusMessage.classList.add('hidden');
+                console.error("Processing Error:", error);
+            } finally {
+                exportText.textContent = "Export Time Log Data (CSV)";
+                loadingIndicator.classList.add('hidden');
+            }
+        }
+
+        generateNextFileBtn.addEventListener('click', () => {
+            resetState();
+            fileInput.click(); // Open file dialog
+        });
+
+        exportBtn.addEventListener('click', () => {
+            if (jsonData.length === 0) {
+                // Should be disabled, but defensive check
+                errorMessage.textContent = "No data to export. Please upload and process a file first.";
+                errorDisplay.classList.remove('hidden');
+                return;
+            }
+
+            // Use the new function to generate CSV with headers
+            const csvContent = generateFullCsvContent(jsonData, metadata);
+
+            // Note: Added BOM to fix encoding/autofit in Excel
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+
+            // Format Filename: Exported_Data_YYYYMMDD_to_YYYYMMDD.csv
+            // Replace slashes/hyphens with underscores for filename safety
+            const filename = `Exported_Data_${metadata.periodCovered.replace(/[^0-9]/g)}.csv`;
+
+            link.setAttribute('href', url);
+            link.setAttribute('download', filename);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            statusMessage.textContent = `Successfully downloaded ${filename}!`;
+        });
+
+        // Initialize state on load
+        resetState();
+    </script>
+</body>
+
+</html>
